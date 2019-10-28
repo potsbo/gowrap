@@ -1,0 +1,33 @@
+import (
+  newrelic "github.com/newrelic/go-agent"
+)
+
+{{ $decorator := (or .Vars.DecoratorName (printf "%sWithNewRelic" .Interface.Name)) }}
+{{ $implName := (printf "impl%s" $decorator) }}
+{{ $segmentName := .Interface.Name }}
+
+// {{$implName}} implements {{.Interface.Type}} that is instrumented with NewRelic logging
+type {{$implName}} struct {
+  _base {{.Interface.Type}}
+}
+
+// New{{$decorator}} instruments an implementation of the {{.Interface.Type}} with NewRelic logging
+func Wrap{{$decorator}}(base {{.Interface.Type}}) {{ .Interface.Type }} {
+  if base == nil {
+    return nil
+  }
+  return {{$implName}}{
+    _base: base, 
+  }
+}
+
+{{range $method := .Interface.Methods}}
+  // {{$method.Name}} implements {{$.Interface.Type}}
+  func (_d {{$implName}}) {{$method.Declaration}} {
+    {{- if $method.AcceptsContext}}
+      nrtx := newrelic.FromContext(ctx)
+      defer newrelic.StartSegment(nrtx, "{{ $segmentName }}/{{ $method.Name }}").End()
+    {{end -}}
+    {{ $method.Pass "_d._base." }}
+  }
+{{end}}
